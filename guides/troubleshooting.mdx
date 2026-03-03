@@ -1,0 +1,439 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for MCP Worklog
+---
+
+Resolve common issues with MCP Worklog installation, configuration, and operation.
+
+## Common Issues
+
+<Accordion title="No commits found in worklog">
+  **Symptoms:**
+  - Worklog file is empty or says "No commits found"
+  - Generated worklog has no content
+
+  **Causes:**
+  - Incorrect `since` date parameter
+  - No commits in the specified date range
+  - Git repository not initialized
+
+  **Solutions:**
+
+  1. **Verify the since parameter:**
+     ```bash
+     # Test with today
+     mcp-worklog.js generate today
+     
+     # Try yesterday if no commits today
+     mcp-worklog.js generate yesterday
+     ```
+
+  2. **Manually check git log:**
+     ```bash
+     cd /path/to/your/project
+     git log --since="2025-08-01T00:00:00" --oneline
+     ```
+     
+     If this shows commits but the worklog is empty, check the date format conversion.
+
+  3. **Check repository status:**
+     ```bash
+     cd /path/to/your/project
+     git status
+     ```
+     
+     Ensure you're in a valid git repository with commit history.
+
+  4. **Verify project path in configuration:**
+     ```bash
+     cat ~/.worklogs/projects.json
+     ```
+     
+     Ensure the path points to the correct repository root.
+</Accordion>
+
+<Accordion title="Gemini CLI errors or authentication failures">
+  **Symptoms:**
+  - "Gemini command not found"
+  - Authentication errors when generating worklogs
+  - Timeout or connection errors
+
+  **Solutions:**
+
+  1. **Verify Gemini CLI installation:**
+     ```bash
+     gemini --help
+     ```
+     
+     If not found, install or add to PATH.
+
+  2. **Re-authenticate:**
+     ```bash
+     gemini auth login
+     # Follow authentication prompts
+     ```
+
+  3. **Test Gemini manually:**
+     ```bash
+     echo "Hello" | gemini
+     # or
+     gemini -p "Hello"
+     ```
+     
+     This helps identify if the issue is with Gemini itself or the integration.
+
+  4. **Update `callGemini()` function:**
+     
+     Your Gemini CLI might use different syntax. Check the README section "Configure callGemini() for your environment" and update the function in `mcp-worklog.js`.
+     
+     Two common patterns:
+     
+     **Prompt via STDIN:**
+     ```js
+     const child = spawn('gemini', ['--model=gemini-2.5-pro'], { stdio: ['pipe','pipe','inherit'] });
+     child.stdin.write(promptText);
+     child.stdin.end();
+     ```
+     
+     **Prompt via flag:**
+     ```js
+     const child = spawn('gemini', ['-p', promptText, '--model=gemini-2.5-pro'], { stdio: ['ignore','pipe','inherit'] });
+     ```
+
+  5. **Check API quotas:**
+     
+     Ensure you haven't exceeded Gemini API rate limits or quotas.
+</Accordion>
+
+<Accordion title="Large repository issues">
+  **Symptoms:**
+  - Script hangs or times out
+  - "maxBuffer exceeded" errors
+  - Very slow worklog generation
+
+  **Causes:**
+  - Large git repositories with many commits
+  - Git log output exceeds buffer size
+  - Too many files changed in commits
+
+  **Solutions:**
+
+  1. **Increase maxBuffer:**
+     
+     In `mcp-worklog.js`, find the spawn/exec calls and increase the buffer:
+     ```js
+     const child = spawn('git', ['log', ...args], {
+       cwd: projectPath,
+       maxBuffer: 1024 * 1024 * 10 // 10MB instead of default
+     });
+     ```
+
+  2. **Limit commit count:**
+     
+     Modify the git log command to limit results:
+     ```bash
+     git log --since="<iso>" --max-count=50 --pretty=format:"%H|%an|%ad|%s" --date=iso --name-only
+     ```
+
+  3. **Filter by specific paths:**
+     
+     Focus on relevant directories:
+     ```bash
+     git log --since="<iso>" -- src/ docs/
+     ```
+
+  4. **Use shallow clones:**
+     
+     If possible, work with shallow clones for CI/CD environments:
+     ```bash
+     git clone --depth=1 <repo-url>
+     ```
+</Accordion>
+
+<Accordion title="Permission errors">
+  **Symptoms:**
+  - "EACCES: permission denied" errors
+  - Cannot write to worklogs folder
+  - Cannot read projects.json
+
+  **Solutions:**
+
+  1. **Check worklogs folder permissions:**
+     ```bash
+     ls -la /path/to/project/worklogs/
+     ```
+     
+     Create the folder if it doesn't exist:
+     ```bash
+     mkdir -p /path/to/project/worklogs
+     chmod 755 /path/to/project/worklogs
+     ```
+
+  2. **Check projects.json permissions:**
+     ```bash
+     ls -la ~/.worklogs/projects.json
+     chmod 644 ~/.worklogs/projects.json
+     ```
+
+  3. **Verify script execution permissions:**
+     ```bash
+     chmod +x ~/tools/mcp-worklog/mcp-worklog.js
+     ```
+
+  4. **Check ownership:**
+     ```bash
+     # Ensure you own the files
+     chown $USER:$USER ~/.worklogs/projects.json
+     chown -R $USER:$USER /path/to/project/worklogs/
+     ```
+</Accordion>
+
+<Accordion title="Cron job not running">
+  **Symptoms:**
+  - Scheduled worklogs not generated
+  - No entries in log file
+  - Cron appears configured but doesn't execute
+
+  **Solutions:**
+
+  1. **Check cron service status:**
+     ```bash
+     sudo systemctl status cron
+     # or on some systems:
+     sudo systemctl status crond
+     ```
+
+  2. **Verify cron job syntax:**
+     ```bash
+     crontab -l
+     ```
+     
+     Ensure the PATH is set correctly in the cron line.
+
+  3. **Check cron logs:**
+     ```bash
+     # System cron log
+     sudo tail -f /var/log/syslog | grep CRON
+     
+     # Your custom log file
+     tail -f ~/mcp-worklog.log
+     ```
+
+  4. **Test command manually:**
+     
+     Copy the exact command from crontab and run it:
+     ```bash
+     /usr/bin/env PATH="$HOME/tools/mcp-worklog:$PATH" mcp-worklog.js generate "today"
+     ```
+
+  5. **Use absolute paths:**
+     
+     Replace relative paths with absolute ones:
+     ```bash
+     0 17 * * 1-5 /usr/bin/node /home/username/tools/mcp-worklog/mcp-worklog.js generate "today" >> /home/username/mcp-worklog.log 2>&1
+     ```
+</Accordion>
+
+<Accordion title="MCP server not responding">
+  **Symptoms:**
+  - Connection refused errors
+  - Timeout when calling endpoints
+  - Server starts but endpoints return 404
+
+  **Solutions:**
+
+  1. **Check if server is running:**
+     ```bash
+     # Check process
+     ps aux | grep mcp-server
+     
+     # Check port
+     netstat -tuln | grep 3000
+     # or
+     lsof -i :3000
+     ```
+
+  2. **Verify server logs:**
+     ```bash
+     # If running with systemd
+     sudo journalctl -u mcp-worklog.service -f
+     
+     # If running manually, check console output
+     node mcp-server.js
+     ```
+
+  3. **Test with curl:**
+     ```bash
+     curl -v http://localhost:3000/list_projects
+     ```
+     
+     The `-v` flag shows detailed connection information.
+
+  4. **Check firewall settings:**
+     ```bash
+     # For local connections, shouldn't be needed
+     # But if accessing remotely:
+     sudo ufw status
+     sudo ufw allow 3000/tcp
+     ```
+
+  5. **Verify bind address:**
+     
+     Ensure the server isn't bound to a specific IP that's inaccessible:
+     ```js
+     // Use 0.0.0.0 for all interfaces (development only)
+     app.listen(3000, '0.0.0.0', () => {...});
+     
+     // Use 127.0.0.1 for localhost only (recommended)
+     app.listen(3000, '127.0.0.1', () => {...});
+     ```
+</Accordion>
+
+<Accordion title="Project not found errors">
+  **Symptoms:**
+  - "Project not found: project-name"
+  - "Active project not set"
+  - "Invalid project configuration"
+
+  **Solutions:**
+
+  1. **List configured projects:**
+     ```bash
+     mcp-worklog.js list-projects
+     ```
+
+  2. **Verify projects.json syntax:**
+     ```bash
+     cat ~/.worklogs/projects.json
+     ```
+     
+     Ensure valid JSON format:
+     ```json
+     {
+       "projects": {
+         "crm-system": "/home/user/projects/crm-system",
+         "ecommerce-app": "/home/user/projects/ecommerce-app"
+       },
+       "activeProject": "crm-system",
+       "worklogFolderName": "worklogs"
+     }
+     ```
+
+  3. **Validate JSON:**
+     ```bash
+     cat ~/.worklogs/projects.json | python -m json.tool
+     ```
+
+  4. **Check project path exists:**
+     ```bash
+     ls -la /home/user/projects/crm-system
+     ```
+
+  5. **Set active project:**
+     ```bash
+     mcp-worklog.js set-active crm-system
+     ```
+</Accordion>
+
+## Debugging Tips
+
+### Enable Verbose Logging
+
+Add debugging output to identify issues:
+
+```js
+// In mcp-worklog.js
+const DEBUG = process.env.DEBUG === 'true';
+
+function log(...args) {
+  if (DEBUG) console.log('[DEBUG]', ...args);
+}
+
+// Use throughout the code
+log('Loading config from:', configPath);
+log('Git command:', gitCommand);
+log('Gemini response length:', response.length);
+```
+
+Run with debugging enabled:
+
+```bash
+DEBUG=true mcp-worklog.js generate today
+```
+
+### Test Git Commands Manually
+
+Isolate git-related issues:
+
+```bash
+cd /path/to/project
+
+# Test the exact command used by the script
+git log --since="2025-08-01T00:00:00" --pretty=format:"%H|%an|%ad|%s" --date=iso --name-only
+
+# Verify date parsing
+date -d "today 00:00:00" --iso-8601=seconds
+date -d "yesterday 00:00:00" --iso-8601=seconds
+```
+
+### Check Node.js Version
+
+Ensure you're using a compatible Node.js version:
+
+```bash
+node --version
+# Should be v16 or higher
+```
+
+Upgrade if necessary:
+
+```bash
+# Using nvm
+nvm install 18
+nvm use 18
+
+# Or download from nodejs.org
+```
+
+### Validate Environment
+
+Confirm your environment is set up correctly:
+
+```bash
+# Check PATH
+echo $PATH | grep "mcp-worklog"
+
+# Check Node.js
+which node
+
+# Check npm packages
+cd ~/tools/mcp-worklog
+npm list
+
+# Check git
+which git
+git --version
+
+# Check Gemini
+which gemini
+gemini --version
+```
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. **Check configuration files** for syntax errors
+2. **Review log files** for error messages
+3. **Test components individually** (git, Gemini, file permissions)
+4. **Simplify your setup** to isolate the problem
+5. **Document error messages** with full stack traces
+
+<Note>
+When reporting issues, include:
+- Operating system and version
+- Node.js version
+- Full error messages
+- Content of projects.json (with sensitive paths redacted)
+- Steps to reproduce the issue
+</Note>

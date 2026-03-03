@@ -1,0 +1,312 @@
+---
+title: MCP Server Setup
+description: Expose worklog functionality as an MCP server using HTTP endpoints
+---
+
+Run MCP Worklog as an HTTP server to enable programmatic access to worklog tools. This allows Gemini and other clients to call worklog functions as MCP endpoints.
+
+## Overview
+
+The MCP server exposes three main endpoints:
+- `list_projects` - List all configured projects
+- `set_active_project` - Change the active project
+- `generate_worklog` - Generate a worklog for a specified date range
+
+## HTTP Server Implementation
+
+Create an MCP server using Express.js to expose worklog functionality.
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    cd ~/tools/mcp-worklog
+    npm install express
+    ```
+  </Step>
+
+  <Step title="Create server file">
+    Create `mcp-server.js` with the following code:
+    ```js
+    const express = require('express');
+    const app = express();
+    app.use(express.json());
+
+    app.post('/list_projects', async (req, res) => {
+      const cfg = loadConfig();
+      res.json({ projects: Object.keys(cfg.projects), activeProject: cfg.activeProject });
+    });
+
+    app.post('/set_active_project', async (req, res) => {
+      const { projectName } = req.body;
+      try {
+        setActiveProject(projectName);
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(400).json({ error: err.message });
+      }
+    });
+
+    app.post('/generate_worklog', async (req, res) => {
+      const since = req.body.since || 'today';
+      try {
+        const iso = parseSinceDate(since);
+        await generate(iso);
+        res.json({ ok: true, path: 'worklogs/<date>.md' });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.listen(3000, () => console.log('MCP server listening on 3000'));
+    ```
+  </Step>
+
+  <Step title="Start the server">
+    ```bash
+    node mcp-server.js
+    ```
+    
+    The server will start on port 3000.
+  </Step>
+</Steps>
+
+## Endpoint Details
+
+### List Projects
+
+Retrieve all configured projects and the currently active project.
+
+**Endpoint:** `POST /list_projects`
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/list_projects \
+  -H "Content-Type: application/json"
+```
+
+**Response:**
+```json
+{
+  "projects": ["crm-system", "ecommerce-app"],
+  "activeProject": "crm-system"
+}
+```
+
+### Set Active Project
+
+Change the active project for worklog generation.
+
+**Endpoint:** `POST /set_active_project`
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/set_active_project \
+  -H "Content-Type: application/json" \
+  -d '{"projectName": "ecommerce-app"}'
+```
+
+**Response:**
+```json
+{
+  "ok": true
+}
+```
+
+**Error Response:**
+```json
+{
+  "error": "Project not found: invalid-project"
+}
+```
+
+### Generate Worklog
+
+Generate a worklog for the specified date range.
+
+**Endpoint:** `POST /generate_worklog`
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/generate_worklog \
+  -H "Content-Type: application/json" \
+  -d '{"since": "today"}'
+```
+
+**Parameters:**
+- `since` (optional): Date range for worklog. Accepts:
+  - `"today"` (default)
+  - `"yesterday"`
+  - ISO date format: `"2025-08-01"`
+
+**Response:**
+```json
+{
+  "ok": true,
+  "path": "worklogs/2025-08-01.md"
+}
+```
+
+**Error Response:**
+```json
+{
+  "error": "No commits found since 2025-08-01"
+}
+```
+
+## Security Considerations
+
+Protect your MCP server from unauthorized access.
+
+<Warning>
+By default, the server listens on all interfaces. Secure it before exposing to a network.
+</Warning>
+
+### Bind to Localhost Only
+
+Restrict server access to local machine only:
+
+```js
+app.listen(3000, 'localhost', () => {
+  console.log('MCP server listening on localhost:3000');
+});
+```
+
+Or using `127.0.0.1`:
+
+```js
+app.listen(3000, '127.0.0.1', () => {
+  console.log('MCP server listening on 127.0.0.1:3000');
+});
+```
+
+### Add Authentication
+
+Implement token-based authentication:
+
+```js
+const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
+
+app.use((req, res, next) => {
+  const token = req.headers['authorization'];
+  if (token !== `Bearer ${AUTH_TOKEN}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+});
+```
+
+Then set the token in your environment:
+
+```bash
+export MCP_AUTH_TOKEN="your-secret-token-here"
+node mcp-server.js
+```
+
+### Use HTTPS
+
+For production deployments, use HTTPS with proper certificates:
+
+```js
+const https = require('https');
+const fs = require('fs');
+
+const options = {
+  key: fs.readFileSync('/path/to/private-key.pem'),
+  cert: fs.readFileSync('/path/to/certificate.pem')
+};
+
+https.createServer(options, app).listen(3000);
+```
+
+### Rate Limiting
+
+Prevent abuse with rate limiting:
+
+```bash
+npm install express-rate-limit
+```
+
+```js
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+
+app.use(limiter);
+```
+
+## Running as a Systemd Service
+
+For always-on availability, run the MCP server as a systemd service. See the [Automation Guide](/guides/automation#systemd-service) for detailed instructions.
+
+## Gemini MCP Integration
+
+Once your server is running, configure Gemini to use these endpoints as MCP tools.
+
+<Note>
+Refer to your Gemini MCP documentation or configuration guide for specific integration steps. The endpoints follow standard MCP conventions and should work with official MCP connectors.
+</Note>
+
+### Example Configuration
+
+Typical MCP configuration structure:
+
+```json
+{
+  "mcpServers": {
+    "worklog": {
+      "url": "http://localhost:3000",
+      "tools": [
+        {
+          "name": "list_projects",
+          "endpoint": "/list_projects"
+        },
+        {
+          "name": "set_active_project",
+          "endpoint": "/set_active_project",
+          "parameters": ["projectName"]
+        },
+        {
+          "name": "generate_worklog",
+          "endpoint": "/generate_worklog",
+          "parameters": ["since"]
+        }
+      ]
+    }
+  }
+}
+```
+
+## Testing the Server
+
+Test endpoints manually before integrating with Gemini.
+
+```bash
+# List projects
+curl -X POST http://localhost:3000/list_projects
+
+# Set active project
+curl -X POST http://localhost:3000/set_active_project \
+  -H "Content-Type: application/json" \
+  -d '{"projectName": "crm-system"}'
+
+# Generate today's worklog
+curl -X POST http://localhost:3000/generate_worklog \
+  -H "Content-Type: application/json" \
+  -d '{"since": "today"}'
+
+# Generate worklog for specific date
+curl -X POST http://localhost:3000/generate_worklog \
+  -H "Content-Type: application/json" \
+  -d '{"since": "2025-08-01"}'
+```
+
+## Best Practices
+
+- **Keep `projects.json` secure**: Never commit configuration files with paths to repositories
+- **Use environment variables**: Store sensitive configuration in environment variables
+- **Monitor logs**: Track server activity and errors using systemd journals or log files
+- **Validate inputs**: Always validate project names and date formats before processing
+- **Handle errors gracefully**: Return meaningful error messages to help clients debug issues

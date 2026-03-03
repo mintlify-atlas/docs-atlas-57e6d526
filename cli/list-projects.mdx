@@ -1,0 +1,124 @@
+---
+title: 'list-projects'
+description: 'List all configured projects and view the active project'
+---
+
+## Overview
+
+The `list-projects` command displays all projects configured in your MCP Worklog configuration file and shows which project is currently active.
+
+## Syntax
+
+```bash
+mcp-worklog list-projects
+```
+
+## Description
+
+This command reads your worklog configuration file (default: `~/.worklogs/projects.json`) and outputs:
+- A list of all configured project names
+- The currently active project (if set)
+
+No parameters or flags are required for this command.
+
+## Example Usage
+
+### Basic Usage
+
+```bash
+mcp-worklog list-projects
+```
+
+**Expected Output:**
+
+```
+Projects: [ 'my-app', 'api-service', 'frontend' ]
+activeProject: my-app
+```
+
+### When No Active Project is Set
+
+If no active project has been configured:
+
+```bash
+mcp-worklog list-projects
+```
+
+**Output:**
+
+```
+Projects: [ 'my-app', 'api-service', 'frontend' ]
+activeProject: undefined
+```
+
+## Configuration
+
+The command reads from the configuration file location:
+
+<ParamField path="WORKLOG_CONFIG" type="environment variable" default="~/.worklogs/projects.json">
+  Override the default configuration file location by setting this environment variable
+</ParamField>
+
+### Configuration File Structure
+
+The configuration file should contain:
+
+```json
+{
+  "projects": {
+    "my-app": "/path/to/my-app",
+    "api-service": "/path/to/api-service",
+    "frontend": "/path/to/frontend"
+  },
+  "activeProject": "my-app",
+  "worklogFolderName": "worklogs"
+}
+```
+
+## Use Cases
+
+### Verify Configuration
+
+Check that all your projects are properly configured:
+
+```bash
+mcp-worklog list-projects
+```
+
+### Check Active Project Before Generating
+
+Before running `generate`, verify which project will be used:
+
+```bash
+mcp-worklog list-projects
+# Projects: [ 'my-app', 'api-service' ]
+# activeProject: my-app
+
+mcp-worklog generate
+```
+
+### Quick Project Reference
+
+Use this command to quickly see what project names are available for use with `set-active`:
+
+```bash
+mcp-worklog list-projects
+# Projects: [ 'my-app', 'api-service', 'frontend' ]
+
+mcp-worklog set-active frontend
+```
+
+## Notes
+
+<Note>
+  If the configuration file doesn't exist, the command will fail with an error. Make sure your configuration is set up before running this command.
+</Note>
+
+<Tip>
+  Use `list-projects` frequently to verify your active project before generating worklogs, especially when working with multiple repositories.
+</Tip>
+
+## Related Commands
+
+- [set-active](/cli/set-active) - Change the active project
+- [generate](/cli/generate) - Generate a worklog for the active project

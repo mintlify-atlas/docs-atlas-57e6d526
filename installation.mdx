@@ -1,0 +1,183 @@
+---
+title: Installation
+description: Install and configure MCP Worklog for your development workflow
+---
+
+# Installation
+
+Get MCP Worklog running on your system in just a few minutes.
+
+## Prerequisites
+
+Before installing MCP Worklog, ensure you have the following:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 16 or higher
+  </Card>
+  <Card title="Git" icon="git">
+    Available on your PATH
+  </Card>
+  <Card title="Gemini CLI" icon="sparkles">
+    Installed and authenticated
+  </Card>
+  <Card title="Git repositories" icon="folder">
+    Local projects to track
+  </Card>
+</CardGroup>
+
+<Warning>
+  The Gemini CLI must be authenticated on your machine before generating worklogs. Run `gemini --help` to verify it's installed correctly.
+</Warning>
+
+## Installation steps
+
+<Steps>
+  <Step title="Create tool directory">
+    Create a dedicated folder for MCP Worklog:
+
+    ```bash
+    mkdir -p ~/tools/mcp-worklog
+    cd ~/tools/mcp-worklog
+    ```
+  </Step>
+
+  <Step title="Copy the script">
+    Download or copy `mcp-worklog.js` to your tool directory:
+
+    ```bash
+    # Copy the script to your tool directory
+    # Then make it executable
+    chmod +x mcp-worklog.js
+    ```
+
+    The script should start with the Node.js shebang:
+
+    ```javascript
+    #!/usr/bin/env node
+    // mcp-worklog.js
+    const fs = require("fs");
+    const path = require("path");
+    const { spawn } = require("child_process");
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Initialize npm and install the required dependency:
+
+    ```bash
+    npm init -y
+    npm install minimist
+    ```
+
+    <Note>
+      While the current version doesn't use `minimist` extensively, it's listed in the package dependencies for future argument parsing enhancements.
+    </Note>
+  </Step>
+
+  <Step title="Create configuration file">
+    Create the worklogs configuration directory and file:
+
+    ```bash
+    mkdir -p ~/.worklogs
+    ```
+
+    Create `~/.worklogs/projects.json` with your project paths:
+
+    ```json
+    {
+      "projects": {
+        "crm-system": "/home/username/projects/crm-system",
+        "ecommerce-app": "/home/username/projects/ecommerce-app"
+      },
+      "activeProject": "crm-system",
+      "worklogFolderName": "worklogs"
+    }
+    ```
+
+    <Warning>
+      Keep `projects.json` secure and **never commit it to public repositories**. It contains absolute paths to your local projects.
+    </Warning>
+
+    **Configuration fields:**
+    - `projects` - Object mapping project names to absolute directory paths
+    - `activeProject` - The currently active project name
+    - `worklogFolderName` - Folder name for storing worklogs (default: `worklogs`)
+  </Step>
+
+  <Step title="Add to PATH (optional)">
+    Add the tool directory to your PATH for easy access from anywhere:
+
+    <CodeGroup>
+      ```bash bash/zsh
+      echo 'export PATH="$HOME/tools/mcp-worklog:$PATH"' >> ~/.bashrc
+      source ~/.bashrc
+      ```
+
+      ```bash zsh
+      echo 'export PATH="$HOME/tools/mcp-worklog:$PATH"' >> ~/.zshrc
+      source ~/.zshrc
+      ```
+    </CodeGroup>
+
+    After adding to PATH, you can call `mcp-worklog.js` from any directory.
+  </Step>
+</Steps>
+
+## Verify installation
+
+Test your installation by listing configured projects:
+
+```bash
+mcp-worklog.js list-projects
+```
+
+You should see output like:
+
+```
+Projects: [ 'crm-system', 'ecommerce-app' ]
+activeProject: crm-system
+```
+
+## Configuration file location
+
+By default, MCP Worklog reads configuration from `~/.worklogs/projects.json`. You can override this with the `WORKLOG_CONFIG` environment variable:
+
+```bash
+export WORKLOG_CONFIG="/custom/path/to/projects.json"
+```
+
+This is defined in `mcp-worklog.js:7-9`:
+
+```javascript
+const CONFIG =
+  process.env.WORKLOG_CONFIG ||
+  path.join(process.env.HOME, ".worklogs", "projects.json");
+```
+
+## Configure Gemini CLI
+
+MCP Worklog calls the Gemini CLI to generate summaries. The default configuration uses:
+
+```javascript
+const child = spawn("gemini", ["--model=gemini-2.5-pro"], {
+  stdio: ["pipe", "pipe", "inherit"],
+});
+```
+
+If your Gemini CLI uses different flags or accepts prompts differently, modify the `callGemini()` function in `mcp-worklog.js:147-161`.
+
+<Note>
+  Test your Gemini CLI manually before generating worklogs:
+  ```bash
+  echo "Hello" | gemini --model=gemini-2.5-pro
+  ```
+</Note>
+
+## Next steps
+
+Now that MCP Worklog is installed, learn how to generate your first worklog:
+
+<Card title="Quick start guide" icon="rocket" href="/quickstart">
+  Generate your first worklog in minutes
+</Card>

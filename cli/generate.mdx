@@ -1,0 +1,308 @@
+---
+title: 'generate'
+description: 'Generate an AI-powered worklog from git commits'
+---
+
+## Overview
+
+The `generate` command analyzes git commits from the active project's repository and uses AI to create a structured worklog with developer details and manager-friendly summaries.
+
+## Syntax
+
+```bash
+mcp-worklog generate [since]
+```
+
+## Parameters
+
+<ParamField path="since" type="string" default="today">
+  Specify the time period for commit analysis. Accepts:
+  - `today` - Commits from today (midnight to now)
+  - `yesterday` - Commits from yesterday (midnight to midnight)
+  - Any valid date string (e.g., `2024-03-15`, `March 15, 2024`)
+  
+  If omitted, defaults to `today`.
+</ParamField>
+
+## Description
+
+The `generate` command performs the following actions:
+
+1. Reads the active project from your configuration
+2. Retrieves git commits from the specified time period (up to 10 most recent commits)
+3. Collects commit diffs with 3 lines of context
+4. Sends the diffs to Google Gemini AI (using `gemini-2.5-pro` model)
+5. Generates a structured markdown worklog with:
+   - **Developer Work Log**: Technical bullet points with commit hashes and file changes
+   - **Manager Summary**: Non-technical progress overview
+6. Saves the worklog to `<repo>/<worklogFolderName>/<date>.md`
+
+## Example Usage
+
+### Generate Today's Worklog
+
+```bash
+mcp-worklog generate
+```
+
+or explicitly:
+
+```bash
+mcp-worklog generate today
+```
+
+**Output:**
+
+```
+⠋ Generating worklog for my-app...
+Saved /Users/dev/projects/my-app/worklogs/2024-03-15.md
+```
+
+### Generate Yesterday's Worklog
+
+```bash
+mcp-worklog generate yesterday
+```
+
+**Output:**
+
+```
+⠋ Generating worklog for my-app...
+Saved /Users/dev/projects/my-app/worklogs/2024-03-14.md
+```
+
+### Generate Worklog for Specific Date
+
+Using ISO date format:
+
+```bash
+mcp-worklog generate 2024-03-10
+```
+
+Using natural language:
+
+```bash
+mcp-worklog generate "March 10, 2024"
+```
+
+**Output:**
+
+```
+⠋ Generating worklog for my-app...
+Saved /Users/dev/projects/my-app/worklogs/2024-03-15.md
+```
+
+<Note>
+  The output filename is always the current date, but the commits analyzed are from the specified date.
+</Note>
+
+### When No Commits Found
+
+If there are no commits in the specified time period:
+
+```bash
+mcp-worklog generate yesterday
+```
+
+**Output:**
+
+```
+No commits found since 2024-03-14T00:00:00.000Z
+```
+
+## Generated Worklog Format
+
+The generated markdown file includes:
+
+```markdown
+# Work Log — 2024-03-15
+
+## Developer Work Log
+
+- `a1b2c3d` Updated user authentication flow in `src/auth/login.js` and `src/middleware/auth.js`
+- `e4f5g6h` Fixed bug in payment processing, modified `src/payments/stripe.js`
+- `i7j8k9l` Refactored database queries in `src/models/user.js` for better performance
+
+---
+
+## Manager Summary
+
+- Enhanced security by improving user authentication mechanisms
+- Resolved payment processing issues affecting checkout flow
+- Improved application performance through database optimization
+```
+
+## Configuration
+
+### Environment Variables
+
+<ParamField path="WORKLOG_CONFIG" type="environment variable" default="~/.worklogs/projects.json">
+  Override the default configuration file location
+</ParamField>
+
+### Configuration File Options
+
+```json
+{
+  "projects": {
+    "my-app": "/Users/dev/projects/my-app"
+  },
+  "activeProject": "my-app",
+  "worklogFolderName": "worklogs"
+}
+```
+
+<ParamField path="worklogFolderName" type="string" default="worklogs">
+  Name of the folder where worklog files will be saved within each project repository
+</ParamField>
+
+## Technical Details
+
+### Commit Limit
+
+The command analyzes a maximum of **10 commits** from the specified time period. If more than 10 commits exist, only the 10 most recent are processed.
+
+### Git Command
+
+Internally uses:
+
+```bash
+git log --since="<date>" --pretty=format:"%H"
+git show <commit-hash> --unified=3
+```
+
+### AI Model
+
+Uses the `gemini-2.5-pro` model via the `gemini` CLI tool. This tool must be installed and configured with proper API credentials.
+
+### Output Location
+
+Worklogs are saved to:
+
+```
+<project-repo-path>/<worklogFolderName>/<YYYY-MM-DD>.md
+```
+
+For example:
+
+```
+/Users/dev/projects/my-app/worklogs/2024-03-15.md
+```
+
+## Error Handling
+
+### No Active Project
+
+```bash
+mcp-worklog generate
+```
+
+**Output:**
+
+```
+No activeProject in config
+```
+
+**Solution:** Run `set-active <project-name>` first.
+
+### Git Repository Not Found
+
+If the active project path is not a valid git repository:
+
+```
+git -C "/path/to/project" log: fatal: not a git repository
+```
+
+**Solution:** Verify the project path in your configuration points to a git repository.
+
+### Gemini CLI Not Available
+
+If the `gemini` command is not found:
+
+```
+spawn gemini ENOENT
+```
+
+**Solution:** Install and configure the Gemini CLI tool.
+
+## Use Cases
+
+### Daily Standup Preparation
+
+Generate a worklog every morning for your standup:
+
+```bash
+mcp-worklog generate yesterday
+```
+
+Open the generated file to review and share your progress.
+
+### End-of-Week Summary
+
+Generate worklogs for each day of the week:
+
+```bash
+mcp-worklog generate "Monday"
+mcp-worklog generate "Tuesday"
+mcp-worklog generate "Wednesday"
+mcp-worklog generate "Thursday"
+mcp-worklog generate "Friday"
+```
+
+### Automated Daily Reports
+
+Create a cron job or GitHub Action:
+
+```bash
+#!/bin/bash
+# Run at 6 PM daily
+mcp-worklog set-active my-app
+mcp-worklog generate today
+```
+
+### Project Switching Workflow
+
+When working across multiple projects:
+
+```bash
+# Morning: Frontend work
+mcp-worklog set-active frontend
+mcp-worklog generate today
+
+# Afternoon: Backend work  
+mcp-worklog set-active api-service
+mcp-worklog generate today
+```
+
+### Retrospective Documentation
+
+Generate historical worklogs for project retrospectives:
+
+```bash
+mcp-worklog generate "2024-03-01"
+mcp-worklog generate "2024-03-08"
+mcp-worklog generate "2024-03-15"
+```
+
+## Notes
+
+<Warning>
+  The `generate` command requires the `gemini` CLI tool to be installed and authenticated. Ensure you have proper API access before running this command.
+</Warning>
+
+<Tip>
+  Use `generate yesterday` at the start of your day to create a summary of previous day's work for standups and status reports.
+</Tip>
+
+<Note>
+  The command creates the worklog folder automatically if it doesn't exist. The default folder name is `worklogs`, but you can customize it in your configuration file.
+</Note>
+
+<Info>
+  Commit diffs include 3 lines of context (`--unified=3`) to provide sufficient information for AI analysis while keeping the prompt size manageable.
+</Info>
+
+## Related Commands
+
+- [set-active](/cli/set-active) - Set which project to generate worklogs for
+- [list-projects](/cli/list-projects) - View configured projects and active project

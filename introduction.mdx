@@ -1,0 +1,118 @@
+---
+title: MCP Worklog
+description: A simple, local-first per-project worklog system powered by Gemini and local Git repositories
+---
+
+# MCP Worklog
+
+MCP Worklog automates daily developer and manager work logs by reading commits and file diffs from your local Git repositories, summarizing them with Gemini AI, and saving structured Markdown reports.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get started with MCP Worklog in minutes
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Generate your first worklog
+  </Card>
+</CardGroup>
+
+## What is MCP Worklog?
+
+MCP Worklog is a command-line tool that transforms your Git commit history into readable work logs. It works entirely locally—no GitHub API required—and uses the Gemini CLI to generate both technical developer logs and manager-friendly summaries.
+
+<Note>
+  MCP Worklog operates on your local Git repositories and doesn't require internet access for Git operations, only for calling the Gemini API.
+</Note>
+
+## Key features
+
+### Local-first operation
+
+Reads directly from your local `.git` directory—no GitHub API keys or remote access required. Perfect for offline work or private repositories.
+
+### Per-project configuration
+
+Manage multiple projects from a single `~/.worklogs/projects.json` configuration file. Switch between projects instantly with the `set-active` command.
+
+### Flexible date ranges
+
+Generate worklogs for specific timeframes using intuitive date parameters:
+- `today` - commits from today at 00:00
+- `yesterday` - commits from yesterday
+- `2025-08-01` - commits from any specific date
+
+### Dual-format output
+
+Each worklog includes:
+- **Developer work log** - technical details with commit hashes, files changed, and categorized actions
+- **Manager summary** - business-friendly bullets describing progress and impact
+
+### Easy automation
+
+Set up automated worklogs with cron jobs, Git hooks, or systemd services. Generate end-of-day summaries automatically.
+
+### MCP server support
+
+Optionally expose worklog commands as MCP tools, allowing Gemini to programmatically list projects, set active projects, and generate worklogs.
+
+## How it works
+
+MCP Worklog follows a simple workflow:
+
+<Steps>
+  <Step title="Read configuration">
+    Loads `~/.worklogs/projects.json` to find your active project path
+  </Step>
+  <Step title="Extract Git history">
+    Runs `git log` with the specified date range to collect commit hashes and diffs
+  </Step>
+  <Step title="Generate summary with Gemini">
+    Sends a structured prompt with commit diffs to Gemini CLI for summarization
+  </Step>
+  <Step title="Save worklog">
+    Writes the formatted output to `worklogs/YYYY-MM-DD.md` in your project directory
+  </Step>
+</Steps>
+
+## Use cases
+
+**Daily standups** - Generate yesterday's worklog before standup meetings to recall what you accomplished
+
+**Weekly reports** - Create comprehensive summaries for weekly team syncs or status updates
+
+**Project documentation** - Build a historical record of development progress for each project
+
+**Manager updates** - Automatically generate non-technical summaries for stakeholders
+
+**Time tracking** - Maintain a detailed log of work activities for billing or performance reviews
+
+## Output format
+
+Worklogs are saved as Markdown files in your project's `worklogs/` directory with the naming convention `YYYY-MM-DD.md`. Each file contains:
+
+```markdown
+# Work Log — 2026-03-03
+
+## Developer Work Log
+- Added user authentication flow [a79fc44] - auth.js, login.js
+- Fixed memory leak in data fetcher [3b4c5d6] - fetcher.js
+- [docs] Updated API documentation [7e8f9g0] - README.md
+
+---
+
+## Manager Summary
+**Progress:** Completed authentication system and resolved performance issues
+- User login and session management now fully functional
+- Fixed critical memory issue affecting data loading performance
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Install MCP Worklog" icon="download" href="/installation">
+    Set up the tool and configure your projects
+  </Card>
+  <Card title="Generate your first worklog" icon="play" href="/quickstart">
+    Follow the quick start guide to create worklogs
+  </Card>
+</CardGroup>

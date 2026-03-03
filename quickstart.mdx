@@ -1,80 +1,303 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Generate your first worklog with MCP Worklog in minutes
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
+This guide walks you through generating your first worklog, from listing projects to viewing the generated summary.
 
-### Step 1: Set up your local environment
+<Note>
+  Make sure you've completed the [installation](/installation) steps before continuing.
+</Note>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 1: List your projects
 
-### Step 2: Deploy your changes
+First, verify your projects are configured correctly:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```bash
+mcp-worklog.js list-projects
+```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+**Example output:**
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```
+Projects: [ 'crm-system', 'ecommerce-app' ]
+activeProject: crm-system
+```
 
-### Step 3: Go live
+This command reads your `~/.worklogs/projects.json` configuration and displays:
+- All configured project names
+- The currently active project
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Note>
+  The `list-projects` command is implemented in `mcp-worklog.js:198-201`.
+</Note>
+
+## Step 2: Set the active project
+
+If you want to generate a worklog for a different project, set it as active:
+
+```bash
+mcp-worklog.js set-active ecommerce-app
+```
+
+**Example output:**
+
+```
+activeProject set to ecommerce-app
+```
+
+This updates the `activeProject` field in your configuration file. The change persists across sessions.
+
+<Warning>
+  The project name must exist in your `projects.json` configuration. Use `list-projects` to see available options.
+</Warning>
+
+## Step 3: Generate your first worklog
+
+Now generate a worklog for today's commits:
+
+```bash
+mcp-worklog.js generate
+```
+
+You'll see a spinner while MCP Worklog:
+1. Extracts commit hashes from your Git repository
+2. Collects diffs for each commit (up to 10 commits)
+3. Sends the diffs to Gemini for summarization
+4. Saves the formatted output
+
+**Example output:**
+
+```
+✓ Generating worklog for ecommerce-app...
+Saved /home/username/projects/ecommerce-app/worklogs/2026-03-03.md
+```
+
+## Using different date ranges
+
+MCP Worklog supports flexible date parameters for generating worklogs:
+
+<CodeGroup>
+  ```bash Today (default)
+  mcp-worklog.js generate
+  # or explicitly
+  mcp-worklog.js generate today
+  ```
+
+  ```bash Yesterday
+  mcp-worklog.js generate yesterday
+  ```
+
+  ```bash Specific date
+  mcp-worklog.js generate 2025-08-01
+  ```
+</CodeGroup>
+
+The `parseSinceDate()` function converts these inputs to ISO timestamps for Git:
+
+- `today` → Today at 00:00 (midnight)
+- `yesterday` → Yesterday at 00:00
+- `YYYY-MM-DD` → Specified date at 00:00
+
+<Note>
+  Date parsing is handled in `mcp-worklog.js:77-119`. All dates are normalized to midnight in your local timezone.
+</Note>
+
+## Understanding the generated worklog
+
+Open the generated Markdown file to see your worklog:
+
+```bash
+cat ~/projects/ecommerce-app/worklogs/2026-03-03.md
+```
+
+**Example worklog structure:**
+
+```markdown
+# Work Log — 2026-03-03
+
+## Developer Work Log
+- Added user authentication flow [a79fc44] - auth.js, login.js, middleware.js
+- Fixed memory leak in data fetcher [3b4c5d6] - fetcher.js, cache.js
+- [refactor] Simplified error handling logic [7e8f9g0] - error-handler.js
+- [docs] Updated API documentation [2c3d4e5] - README.md, api-docs.md
+
+---
+
+## Manager Summary
+**Progress:** Completed authentication system and resolved performance issues
+- User login and session management now fully functional in production
+- Fixed critical memory issue affecting data loading, improving app responsiveness
+```
+
+The worklog includes:
+- **Developer Work Log** - Technical bullets with commit hashes and file changes
+- **Manager Summary** - Business-friendly progress overview
+
+## How the generation works
+
+Here's what happens when you run `generate`:
+
+<Steps>
+  <Step title="Load configuration">
+    Reads `~/.worklogs/projects.json` to get the active project path:
+
+    ```javascript
+    function getActiveRepoPath() {
+      const cfg = loadConfig();
+      const name = cfg.activeProject;
+      const repo = cfg.projects[name];
+      return { name, repo, worklogFolderName: cfg.worklogFolderName || "worklogs" };
+    }
+    ```
+  </Step>
+
+  <Step title="Extract commit hashes">
+    Runs `git log` to get commit hashes since the specified date:
+
+    ```bash
+    git -C "/path/to/repo" log --since="2026-03-03T00:00:00" --pretty=format:"%H"
+    ```
+
+    Limited to the 10 most recent commits to keep API requests manageable.
+  </Step>
+
+  <Step title="Collect commit diffs">
+    For each commit hash, runs `git show` to get the full diff:
+
+    ```bash
+    git -C "/path/to/repo" show a79fc44 --unified=3 --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n"
+    ```
+
+    The diff includes commit metadata and code changes with 3 lines of context.
+  </Step>
+
+  <Step title="Build prompt">
+    Combines all diffs into a structured prompt for Gemini:
+
+    ```javascript
+    function buildPromptFromDiffs(diffs) {
+      const combinedDiffs = diffs.join("\n\n---\n\n");
+      return `You are a 10x developer assistant.
+      
+      Input: Recent git commit diffs below:
+      
+      ${combinedDiffs}
+      
+      Task 1: Produce a "Developer Work Log" in markdown format...
+      Task 2: Produce a "Manager Summary" with concise, non-technical bullet points...
+      
+      Output both sections separated by a horizontal rule.`;
+    }
+    ```
+  </Step>
+
+  <Step title="Call Gemini CLI">
+    Spawns the Gemini CLI process and pipes the prompt via stdin:
+
+    ```javascript
+    const child = spawn("gemini", ["--model=gemini-2.5-pro"], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    child.stdin.write(promptText);
+    child.stdin.end();
+    ```
+  </Step>
+
+  <Step title="Save worklog">
+    Writes the Gemini response to a dated Markdown file:
+
+    ```javascript
+    const date = new Date().toISOString().slice(0, 10);
+    const outPath = path.join(repo, worklogFolderName, `${date}.md`);
+    fs.writeFileSync(outPath, `# Work Log — ${date}\n\n${result.trim()}\n`);
+    ```
+  </Step>
+</Steps>
+
+## All available commands
+
+MCP Worklog provides three CLI commands:
+
+<CardGroup cols={3}>
+  <Card title="list-projects" icon="list">
+    Display all configured projects and the active project
+  </Card>
+  <Card title="set-active" icon="check">
+    Change the currently active project
+  </Card>
+  <Card title="generate" icon="sparkles">
+    Generate a worklog for the active project
+  </Card>
+</CardGroup>
+
+**Command syntax:**
+
+```bash
+# List all projects
+mcp-worklog.js list-projects
+
+# Set active project
+mcp-worklog.js set-active <project-name>
+
+# Generate worklog
+mcp-worklog.js generate [today|yesterday|YYYY-MM-DD]
+```
+
+## Troubleshooting
+
+### No commits found
+
+If you see "No commits found since [date]", check:
+- You have commits in the specified date range: `git log --since="2026-03-03T00:00:00"`
+- The active project path is correct: `mcp-worklog.js list-projects`
+- You're generating from the right date (try `yesterday` instead of `today`)
+
+### Gemini CLI errors
+
+If Gemini fails to respond:
+- Verify Gemini is installed: `gemini --help`
+- Check authentication: `gemini -p "test"`
+- Review the spawn configuration in `mcp-worklog.js:147-161`
+
+### Large repository issues
+
+For repos with many commits or large diffs:
+- The script limits to 10 commits automatically
+- Increase `maxBuffer` in `mcp-worklog.js:44` if you see buffer errors:
+  ```javascript
+  { maxBuffer: 20 * 1024 * 1024 }  // 20MB
+  ```
+
+### Permission errors
+
+If you can't write worklogs:
+- Check the project directory exists and is writable
+- Verify the path in `projects.json` is correct
+- Ensure `worklogFolderName` doesn't conflict with existing files
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Automate with cron" icon="clock">
+    Set up daily automated worklogs at 5pm:
+    ```bash
+    0 17 * * 1-5 mcp-worklog.js generate today
+    ```
+  </Card>
+  <Card title="Commit worklogs to Git" icon="code-branch">
+    Track worklogs in a dedicated branch:
+    ```bash
+    cd /path/to/project
+    git checkout -B worklogs
+    git add worklogs/*.md
+    git commit -m "worklog: $(date +%F)"
+    ```
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  For more automation options, see the **Automation** section in the README.
 </Note>

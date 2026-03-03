@@ -1,0 +1,371 @@
+---
+title: 'Gemini CLI Setup'
+description: 'Install and configure Google Gemini CLI for worklog generation'
+---
+
+## Overview
+
+MCP Worklog uses the Google Gemini CLI to generate intelligent summaries of your Git commits. The tool sends commit diffs to Gemini, which produces both a developer work log and a manager-friendly summary.
+
+<Warning>
+  **Authentication Required**: The Gemini CLI must be installed and authenticated on the machine where you run MCP Worklog. The tool will fail if Gemini CLI is not available or not authenticated.
+</Warning>
+
+## Prerequisites
+
+- Node.js v16 or higher
+- `git` available on PATH
+- Google account with Gemini API access
+- Command-line access to install the Gemini CLI
+
+## Installing Gemini CLI
+
+The Gemini CLI is Google's official command-line interface for interacting with Gemini models.
+
+### Installation Steps
+
+1. **Install via npm** (recommended):
+
+```bash
+npm install -g @google/generative-ai-cli
+```
+
+2. **Verify installation**:
+
+```bash
+gemini --help
+```
+
+You should see the Gemini CLI help output with available commands and options.
+
+3. **Check version**:
+
+```bash
+gemini --version
+```
+
+<Note>
+  If the `gemini` command is not found after installation, ensure your npm global bin directory is in your PATH:
+  ```bash
+  export PATH="$(npm config get prefix)/bin:$PATH"
+  ```
+  Add this to your `~/.bashrc` or `~/.zshrc` to make it permanent.
+</Note>
+
+## Authentication
+
+The Gemini CLI requires authentication to access Google's Gemini API.
+
+### Authenticate Your Account
+
+1. **Run the authentication command**:
+
+```bash
+gemini auth login
+```
+
+2. **Follow the prompts** to sign in with your Google account
+
+3. **Grant necessary permissions** when prompted
+
+4. **Verify authentication**:
+
+```bash
+echo "Hello from Gemini" | gemini
+```
+
+If authenticated correctly, you should receive a response from Gemini.
+
+<Warning>
+  **Security**: The Gemini CLI stores credentials on your local machine. Ensure your system is secure and use OS-level credential stores when possible. Never commit authentication tokens or API keys to version control.
+</Warning>
+
+## How MCP Worklog Uses Gemini
+
+MCP Worklog calls the Gemini CLI programmatically to generate worklog summaries.
+
+### The callGemini() Function
+
+The core integration is in the `callGemini()` function (`mcp-worklog.js:147-161`):
+
+```javascript
+function callGemini(promptText) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("gemini", ["--model=gemini-2.5-pro"], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d.toString()));
+    child.on("close", (code) => {
+      if (code === 0) resolve(out);
+      else reject(new Error("gemini exited code " + code));
+    });
+    child.stdin.write(promptText);
+    child.stdin.end();
+  });
+}
+```
+
+### How It Works
+
+<Accordion title="1. Spawn Gemini CLI Process">
+  The function uses Node.js `spawn()` to create a child process that runs the `gemini` command with the `--model=gemini-2.5-pro` flag.
+
+  ```javascript
+  const child = spawn("gemini", ["--model=gemini-2.5-pro"], {
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+  ```
+
+  - `stdio: ["pipe", "pipe", "inherit"]` configures stdin and stdout as pipes, and inherits stderr
+  - This allows the script to write to Gemini's stdin and read from its stdout
+</Accordion>
+
+<Accordion title="2. Send Prompt via STDIN">
+  The prompt text (containing Git commit diffs) is written to Gemini's standard input:
+
+  ```javascript
+  child.stdin.write(promptText);
+  child.stdin.end();
+  ```
+
+  This is the **prompt via STDIN** pattern, where the entire prompt is sent through the input stream.
+</Accordion>
+
+<Accordion title="3. Collect Response from STDOUT">
+  The function listens for data events on stdout and accumulates the response:
+
+  ```javascript
+  let out = "";
+  child.stdout.on("data", (d) => (out += d.toString()));
+  ```
+
+  When the process closes, the complete response is returned.
+</Accordion>
+
+<Accordion title="4. Handle Exit Codes">
+  The function checks the exit code to determine success or failure:
+
+  ```javascript
+  child.on("close", (code) => {
+    if (code === 0) resolve(out);
+    else reject(new Error("gemini exited code " + code));
+  });
+  ```
+
+  - Exit code `0` = success
+  - Non-zero exit code = error (authentication failure, API error, etc.)
+</Accordion>
+
+### The Prompt Structure
+
+The prompt sent to Gemini is built from recent Git commits (`mcp-worklog.js:64-76`):
+
+```javascript
+function buildPromptFromDiffs(diffs) {
+  const combinedDiffs = diffs.join("\n\n---\n\n");
+  return `You are a 10x developer assistant.
+  
+  Input: Recent git commit diffs below:
+  
+  ${combinedDiffs}
+  
+  Task 1: Produce a "Developer Work Log" in markdown format. For each commit write a bullet point summarizing the key code changes and files affected, using the commit hash short form.
+  Task 2: Produce a "Manager Summary" with concise, non-technical bullet points describing overall progress.
+  
+  Output both sections separated by a horizontal rule.`;
+}
+```
+
+The prompt:
+- Includes up to 10 recent commit diffs
+- Requests two sections: Developer Work Log and Manager Summary
+- Uses markdown formatting
+- References commit hashes for traceability
+
+## Alternative Gemini CLI Patterns
+
+Different versions of the Gemini CLI may accept prompts differently. If the default STDIN method doesn't work, try these alternatives:
+
+### Option 1: Prompt via STDIN (Default)
+
+```javascript
+const child = spawn('gemini', ['--model=gemini-2.5-pro'], { 
+  stdio: ['pipe','pipe','inherit'] 
+});
+child.stdin.write(promptText);
+child.stdin.end();
+```
+
+**Test manually**:
+```bash
+echo "Hello from Gemini" | gemini --model=gemini-2.5-pro
+```
+
+### Option 2: Prompt via -p or --prompt Flag
+
+```javascript
+const child = spawn('gemini', ['-p', promptText, '--model=gemini-2.5-pro'], { 
+  stdio: ['ignore','pipe','inherit'] 
+});
+```
+
+**Test manually**:
+```bash
+gemini -p "Hello from Gemini" --model=gemini-2.5-pro
+```
+
+### Option 3: Prompt via File
+
+```javascript
+fs.writeFileSync('/tmp/prompt.txt', promptText);
+const child = spawn('gemini', ['--input=/tmp/prompt.txt', '--model=gemini-2.5-pro'], { 
+  stdio: ['ignore','pipe','inherit'] 
+});
+```
+
+<Note>
+  Test your Gemini CLI manually before running MCP Worklog to determine which pattern works for your installation. Update the `callGemini()` function in `mcp-worklog.js` if needed.
+</Note>
+
+## Model Selection
+
+The default model is **gemini-2.5-pro**, specified in the `callGemini()` function:
+
+```javascript
+const child = spawn("gemini", ["--model=gemini-2.5-pro"], ...);
+```
+
+### Changing the Model
+
+To use a different Gemini model, edit the model parameter in `mcp-worklog.js:149`:
+
+```javascript
+// Use Gemini 1.5 Pro
+const child = spawn("gemini", ["--model=gemini-1.5-pro"], ...);
+
+// Use Gemini 1.5 Flash (faster, lower cost)
+const child = spawn("gemini", ["--model=gemini-1.5-flash"], ...);
+```
+
+Available models:
+- `gemini-2.5-pro` - Most capable (default)
+- `gemini-1.5-pro` - Previous generation, very capable
+- `gemini-1.5-flash` - Faster and more cost-effective
+
+Refer to [Google's Gemini documentation](https://ai.google.dev/models/gemini) for the latest model options.
+
+## Troubleshooting
+
+<Accordion title="Error: 'gemini' command not found">
+  **Cause**: The Gemini CLI is not installed or not in your PATH.
+
+  **Solution**:
+  1. Install Gemini CLI: `npm install -g @google/generative-ai-cli`
+  2. Add npm global bin to PATH:
+     ```bash
+     export PATH="$(npm config get prefix)/bin:$PATH"
+     ```
+  3. Verify: `gemini --help`
+</Accordion>
+
+<Accordion title="Error: gemini exited code 1">
+  **Cause**: Authentication failure or API error.
+
+  **Solution**:
+  1. Re-authenticate: `gemini auth login`
+  2. Verify credentials: `echo "test" | gemini`
+  3. Check API quotas in Google Cloud Console
+  4. Ensure you have API access enabled for Gemini
+</Accordion>
+
+<Accordion title="Error: Request timeout or no response">
+  **Cause**: Large commit diffs or slow API response.
+
+  **Solution**:
+  1. The script limits to 10 commits by default (`mcp-worklog.js:55`)
+  2. For large diffs, increase the buffer size:
+     ```javascript
+     { maxBuffer: 20 * 1024 * 1024 }  // 20MB buffer
+     ```
+  3. Consider reducing the number of commits analyzed
+</Accordion>
+
+<Accordion title="Error: Authentication required">
+  **Cause**: Gemini CLI credentials expired or not configured.
+
+  **Solution**:
+  1. Run: `gemini auth login`
+  2. Follow the authentication flow
+  3. Verify: `gemini auth status`
+</Accordion>
+
+<Accordion title="Poor quality summaries">
+  **Cause**: The prompt or commit data may need refinement.
+
+  **Solution**:
+  1. Review the prompt in `buildPromptFromDiffs()` (`mcp-worklog.js:64-76`)
+  2. Adjust the prompt to better guide Gemini:
+     - Add more specific instructions
+     - Include examples of desired output
+     - Refine the commit diff format
+  3. Consider switching to a more capable model (e.g., `gemini-2.5-pro`)
+</Accordion>
+
+## Testing Your Setup
+
+### Manual Test
+
+Test the Gemini CLI manually before using it with MCP Worklog:
+
+```bash
+# Test basic connectivity
+echo "Summarize: Added user authentication" | gemini --model=gemini-2.5-pro
+
+# Test with a sample Git diff
+echo "Summarize this commit:\n$(git show HEAD)" | gemini --model=gemini-2.5-pro
+```
+
+### Integration Test
+
+Test the full MCP Worklog flow:
+
+```bash
+# Generate a worklog for today
+mcp-worklog.js generate today
+
+# Check the output
+cat <project-path>/worklogs/$(date +%F).md
+```
+
+If successful, you'll see:
+- A spinner during generation: `⠋ Generating worklog for <project>...`
+- Success message: `Saved <project-path>/worklogs/YYYY-MM-DD.md`
+- A markdown file with Developer Work Log and Manager Summary sections
+
+## API Usage and Costs
+
+Gemini API usage may be subject to quotas and costs depending on your Google Cloud project settings.
+
+<Warning>
+  **Cost Awareness**: Each worklog generation sends commit diffs to Gemini API. Monitor your API usage in Google Cloud Console to avoid unexpected charges. Consider using `gemini-1.5-flash` for lower costs.
+</Warning>
+
+- Review quotas: [Google Cloud Console - Quotas](https://console.cloud.google.com/iam-admin/quotas)
+- Check pricing: [Gemini API Pricing](https://ai.google.dev/pricing)
+- Monitor usage: [Google Cloud Console - APIs & Services](https://console.cloud.google.com/apis)
+
+## Best Practices
+
+1. **Authenticate Once**: Run `gemini auth login` once per machine; credentials persist
+2. **Test First**: Always test the Gemini CLI manually before automating
+3. **Use Appropriate Models**: Choose `gemini-1.5-flash` for speed/cost, `gemini-2.5-pro` for quality
+4. **Monitor Quotas**: Set up alerts for API usage in Google Cloud Console
+5. **Secure Credentials**: Don't commit API keys or authentication tokens to repositories
+6. **Handle Errors Gracefully**: The script will exit with an error if Gemini fails; check logs
+
+## Next Steps
+
+- Learn how to [generate worklogs](/usage/generating-worklogs)
+- Set up [automation with cron](/advanced/automation)
+- Explore [customizing prompts](/advanced/custom-prompts)

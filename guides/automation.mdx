@@ -1,0 +1,239 @@
+---
+title: Automating Worklog Generation
+description: Set up automated worklog generation with cron, git hooks, and systemd services
+---
+
+Automate your worklog generation to ensure daily logs are created without manual intervention. This guide covers three automation approaches: cron jobs, git hooks, and systemd services.
+
+## Cron Job Setup
+
+The most common automation method is using cron to generate worklogs at a specific time each day.
+
+### Daily Worklog at 17:00 (Weekdays Only)
+
+<Steps>
+  <Step title="Open crontab editor">
+    Open your crontab configuration:
+    ```bash
+    crontab -e
+    ```
+  </Step>
+
+  <Step title="Add cron job">
+    Add this line to generate worklogs daily at 5:00 PM on weekdays:
+    ```bash
+    0 17 * * 1-5 /usr/bin/env PATH="$HOME/tools/mcp-worklog:$PATH" mcp-worklog.js generate "today" >> ~/mcp-worklog.log 2>&1
+    ```
+    
+    This command:
+    - Runs at 17:00 (5:00 PM) on weekdays (Monday-Friday)
+    - Ensures the tool is in PATH
+    - Generates today's worklog
+    - Logs output to `~/mcp-worklog.log`
+  </Step>
+
+  <Step title="Verify cron job">
+    List your cron jobs to confirm:
+    ```bash
+    crontab -l
+    ```
+  </Step>
+</Steps>
+
+### Custom Cron Schedules
+
+Adjust the cron schedule to fit your workflow:
+
+```bash
+# Daily at 18:30 (including weekends)
+30 18 * * * /usr/bin/env PATH="$HOME/tools/mcp-worklog:$PATH" mcp-worklog.js generate "today" >> ~/mcp-worklog.log 2>&1
+
+# Twice daily (noon and 5 PM) on weekdays
+0 12,17 * * 1-5 /usr/bin/env PATH="$HOME/tools/mcp-worklog:$PATH" mcp-worklog.js generate "today" >> ~/mcp-worklog.log 2>&1
+
+# Every Friday at 4 PM (weekly summary)
+0 16 * * 5 /usr/bin/env PATH="$HOME/tools/mcp-worklog:$PATH" mcp-worklog.js generate "today" >> ~/mcp-worklog.log 2>&1
+```
+
+<Note>
+The `PATH` variable must be explicitly set in cron jobs because cron runs with a minimal environment. This ensures `mcp-worklog.js` can be found.
+</Note>
+
+## Git Hook Integration
+
+Automatically generate worklogs after each commit using git hooks.
+
+<Steps>
+  <Step title="Navigate to your project">
+    ```bash
+    cd /path/to/your/project
+    ```
+  </Step>
+
+  <Step title="Create post-commit hook">
+    Create or edit the post-commit hook:
+    ```bash
+    nano .git/hooks/post-commit
+    ```
+  </Step>
+
+  <Step title="Add hook script">
+    Add this content:
+    ```bash
+    #!/bin/bash
+    # Auto-generate worklog after each commit
+    mcp-worklog.js generate "today"
+    ```
+  </Step>
+
+  <Step title="Make hook executable">
+    ```bash
+    chmod +x .git/hooks/post-commit
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Git hooks can slow down your commit workflow since they run synchronously. Consider whether you want a worklog generated after every commit, or if a daily cron job is more appropriate.
+</Warning>
+
+### Alternative: Pre-Push Hook
+
+For less frequent updates, use a `pre-push` hook instead:
+
+```bash
+#!/bin/bash
+# Generate worklog before pushing
+mcp-worklog.js generate "today"
+```
+
+Place this in `.git/hooks/pre-push` and make it executable.
+
+## Systemd Service
+
+Run the MCP server as a system service for always-on availability.
+
+<Steps>
+  <Step title="Create service file">
+    Create a systemd service file:
+    ```bash
+    sudo nano /etc/systemd/system/mcp-worklog.service
+    ```
+  </Step>
+
+  <Step title="Add service configuration">
+    ```ini
+    [Unit]
+    Description=MCP Worklog Server
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=yourusername
+    WorkingDirectory=/home/yourusername/tools/mcp-worklog
+    ExecStart=/usr/bin/node /home/yourusername/tools/mcp-worklog/mcp-server.js
+    Restart=on-failure
+    RestartSec=10
+    StandardOutput=journal
+    StandardError=journal
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    
+    Replace `yourusername` with your actual username.
+  </Step>
+
+  <Step title="Reload systemd">
+    ```bash
+    sudo systemctl daemon-reload
+    ```
+  </Step>
+
+  <Step title="Enable and start service">
+    ```bash
+    sudo systemctl enable mcp-worklog.service
+    sudo systemctl start mcp-worklog.service
+    ```
+  </Step>
+
+  <Step title="Check service status">
+    ```bash
+    sudo systemctl status mcp-worklog.service
+    ```
+  </Step>
+</Steps>
+
+### Managing the Service
+
+```bash
+# Stop the service
+sudo systemctl stop mcp-worklog.service
+
+# Restart the service
+sudo systemctl restart mcp-worklog.service
+
+# View logs
+sudo journalctl -u mcp-worklog.service -f
+
+# Disable auto-start
+sudo systemctl disable mcp-worklog.service
+```
+
+<Note>
+The systemd service is most useful when running the MCP HTTP server continuously, rather than for one-time worklog generation.
+</Note>
+
+## Committing Worklogs to Git
+
+Optionally maintain a remote history of worklogs in a dedicated branch.
+
+<Steps>
+  <Step title="Generate worklog">
+    ```bash
+    mcp-worklog.js generate "today"
+    ```
+  </Step>
+
+  <Step title="Switch to worklogs branch">
+    ```bash
+    cd /path/to/project
+    git checkout -B worklogs
+    ```
+  </Step>
+
+  <Step title="Commit and push">
+    ```bash
+    git add worklogs/$(date +%F).md
+    git commit -m "worklog: $(date +%F)"
+    git push origin worklogs --force
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Using `git push --force` will rewrite the remote branch history. If you share this branch with others, prefer manual review or use regular push instead.
+</Warning>
+
+### Automated Script
+
+Combine worklog generation and git commit in a single script:
+
+```bash
+#!/bin/bash
+set -e
+
+# Generate worklog
+mcp-worklog.js generate "today"
+
+# Commit to worklogs branch
+cd "$PROJECT_PATH"
+git checkout -B worklogs
+git add "worklogs/$(date +%F).md"
+git commit -m "worklog: $(date +%F)" || echo "No changes to commit"
+git push origin worklogs
+
+echo "Worklog committed and pushed"
+```
+
+Add this to your cron job for fully automated worklog management.

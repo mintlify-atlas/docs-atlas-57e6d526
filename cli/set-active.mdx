@@ -1,0 +1,170 @@
+---
+title: 'set-active'
+description: 'Set the active project for worklog generation'
+---
+
+## Overview
+
+The `set-active` command designates which project should be used when generating worklogs. This sets the active project in your configuration file.
+
+## Syntax
+
+```bash
+mcp-worklog set-active <project-name>
+```
+
+## Parameters
+
+<ParamField path="project-name" type="string" required>
+  The name of the project to set as active. Must match a project name defined in your configuration file.
+</ParamField>
+
+## Description
+
+This command updates the `activeProject` field in your worklog configuration file. The project name you specify must already exist in the `projects` object of your configuration.
+
+When you run `generate`, MCP Worklog will use the active project's repository path to collect git commits and create worklogs.
+
+## Example Usage
+
+### Set a Project as Active
+
+```bash
+mcp-worklog set-active my-app
+```
+
+**Output:**
+
+```
+activeProject set to my-app
+```
+
+### Switch Between Projects
+
+When working on multiple projects, switch the active project before generating worklogs:
+
+```bash
+# Check current active project
+mcp-worklog list-projects
+# Projects: [ 'my-app', 'api-service', 'frontend' ]
+# activeProject: my-app
+
+# Switch to a different project
+mcp-worklog set-active api-service
+# activeProject set to api-service
+
+# Generate worklog for the new active project
+mcp-worklog generate
+```
+
+## Error Handling
+
+### Unknown Project Error
+
+If you try to set a project that doesn't exist in your configuration:
+
+```bash
+mcp-worklog set-active nonexistent-project
+```
+
+**Output:**
+
+```
+Unknown project: nonexistent-project
+```
+
+### Configuration File Missing
+
+If the configuration file doesn't exist:
+
+```bash
+mcp-worklog set-active my-app
+```
+
+**Output:**
+
+```
+ENOENT: no such file or directory, open '/home/user/.worklogs/projects.json'
+```
+
+## Configuration
+
+The command modifies the configuration file at:
+
+<ParamField path="WORKLOG_CONFIG" type="environment variable" default="~/.worklogs/projects.json">
+  Override the default configuration file location by setting this environment variable
+</ParamField>
+
+### Configuration File Structure
+
+Your configuration file should contain a `projects` object with project names and paths:
+
+```json
+{
+  "projects": {
+    "my-app": "/Users/dev/projects/my-app",
+    "api-service": "/Users/dev/projects/api-service",
+    "frontend": "/Users/dev/projects/frontend"
+  },
+  "activeProject": "my-app",
+  "worklogFolderName": "worklogs"
+}
+```
+
+When you run `set-active frontend`, the `activeProject` field will be updated to `"frontend"`.
+
+## Use Cases
+
+### Daily Project Switching
+
+If you work on multiple projects throughout the day:
+
+```bash
+# Morning: work on main app
+mcp-worklog set-active my-app
+mcp-worklog generate
+
+# Afternoon: switch to API service
+mcp-worklog set-active api-service
+mcp-worklog generate
+```
+
+### Team Workflow
+
+When different team members work on different repositories:
+
+```bash
+# Developer A works on frontend
+mcp-worklog set-active frontend
+mcp-worklog generate today
+
+# Developer B works on backend
+mcp-worklog set-active api-service
+mcp-worklog generate today
+```
+
+### CI/CD Integration
+
+Automatically set the active project in scripts:
+
+```bash
+#!/bin/bash
+PROJECT_NAME=$1
+mcp-worklog set-active $PROJECT_NAME
+mcp-worklog generate yesterday
+```
+
+## Notes
+
+<Warning>
+  The project name must exist in your configuration file's `projects` object. Use `list-projects` to see available project names.
+</Warning>
+
+<Tip>
+  Set the active project immediately before generating a worklog to avoid confusion about which repository is being analyzed.
+</Tip>
+
+## Related Commands
+
+- [list-projects](/cli/list-projects) - View all projects and the current active project
+- [generate](/cli/generate) - Generate a worklog for the active project

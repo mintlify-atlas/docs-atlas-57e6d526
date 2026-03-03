@@ -1,0 +1,244 @@
+---
+title: 'projects.json Configuration'
+description: 'Configure MCP Worklog projects and settings'
+---
+
+## Overview
+
+The `projects.json` file is the central configuration file for MCP Worklog. It stores all your project paths, the active project, and worklog folder settings.
+
+<Warning>
+  **Security Notice**: Keep this file in your home directory (or a secure path). Do not commit it to public repositories as it contains absolute paths to your projects.
+</Warning>
+
+## File Location
+
+By default, the configuration file is located at:
+
+```
+~/.worklogs/projects.json
+```
+
+You can override this location by setting the `WORKLOG_CONFIG` environment variable:
+
+```bash
+export WORKLOG_CONFIG="/path/to/custom/projects.json"
+```
+
+## Configuration Structure
+
+The `projects.json` file contains three main sections:
+
+```json
+{
+  "projects": {
+    "crm-system": "/home/ashar/projects/crm-system",
+    "ecommerce-app": "/home/ashar/projects/ecommerce-app"
+  },
+  "activeProject": "crm-system",
+  "worklogFolderName": "worklogs"
+}
+```
+
+<Accordion title="projects (required)">
+  An object containing project name to absolute path mappings.
+
+  - **Type**: Object
+  - **Key**: Project name (string) - A unique identifier for the project
+  - **Value**: Absolute path (string) - The full filesystem path to the Git repository
+
+  **Example**:
+  ```json
+  "projects": {
+    "crm-system": "/home/ashar/projects/crm-system",
+    "ecommerce-app": "/home/ashar/projects/ecommerce-app",
+    "mobile-app": "/home/ashar/projects/mobile-app"
+  }
+  ```
+
+  **Requirements**:
+  - Each path must point to a valid Git repository
+  - Paths must be absolute (not relative)
+  - Project names must be unique
+</Accordion>
+
+<Accordion title="activeProject (required)">
+  The currently active project that will be used for worklog generation.
+
+  - **Type**: String
+  - **Value**: Must match one of the keys in the `projects` object
+
+  **Example**:
+  ```json
+  "activeProject": "crm-system"
+  ```
+
+  **Usage**:
+  - When you run `mcp-worklog.js generate`, it uses this project
+  - Change the active project with: `mcp-worklog.js set-active <project-name>`
+  - If not set or invalid, the tool will throw an error
+</Accordion>
+
+<Accordion title="worklogFolderName (optional)">
+  The name of the folder where worklog files will be saved within each project.
+
+  - **Type**: String
+  - **Default**: `"worklogs"` (if not specified)
+
+  **Example**:
+  ```json
+  "worklogFolderName": "worklogs"
+  ```
+
+  **Behavior**:
+  - Worklog files are saved as: `<project-path>/<worklogFolderName>/YYYY-MM-DD.md`
+  - The folder is created automatically if it doesn't exist
+  - You can customize this to use different folder names like `"work-logs"`, `"daily-logs"`, etc.
+</Accordion>
+
+## Initial Setup
+
+### Step 1: Create the Configuration Directory
+
+```bash
+mkdir -p ~/.worklogs
+```
+
+### Step 2: Create the Configuration File
+
+Create `~/.worklogs/projects.json` with your project information:
+
+```bash
+nano ~/.worklogs/projects.json
+```
+
+### Step 3: Add Your Projects
+
+Paste the configuration template and customize it:
+
+```json
+{
+  "projects": {
+    "my-first-project": "/absolute/path/to/project",
+    "my-second-project": "/absolute/path/to/another/project"
+  },
+  "activeProject": "my-first-project",
+  "worklogFolderName": "worklogs"
+}
+```
+
+<Warning>
+  **Important**: Replace the placeholder paths with actual absolute paths to your Git repositories. The repositories must have Git initialized and contain commits.
+</Warning>
+
+## Managing Projects
+
+### List All Projects
+
+View all configured projects and the currently active one:
+
+```bash
+mcp-worklog.js list-projects
+```
+
+**Example Output**:
+```
+Projects: [ 'crm-system', 'ecommerce-app' ]
+activeProject: crm-system
+```
+
+### Switch Active Project
+
+Change which project is used for worklog generation:
+
+```bash
+mcp-worklog.js set-active ecommerce-app
+```
+
+**Output**:
+```
+activeProject set to ecommerce-app
+```
+
+## How Configuration is Used
+
+When you run `mcp-worklog.js generate`, the tool:
+
+1. Reads the configuration file from `~/.worklogs/projects.json` (or `$WORKLOG_CONFIG`)
+2. Looks up the `activeProject` name
+3. Gets the corresponding path from the `projects` object
+4. Runs `git log` commands in that repository
+5. Saves the generated worklog to `<project-path>/<worklogFolderName>/YYYY-MM-DD.md`
+
+## Source Code Reference
+
+The configuration loading logic is implemented in `mcp-worklog.js:121-128`:
+
+```javascript
+const CONFIG =
+  process.env.WORKLOG_CONFIG ||
+  path.join(process.env.HOME, ".worklogs", "projects.json");
+
+function loadConfig() {
+  return JSON.parse(fs.readFileSync(CONFIG, "utf8"));
+}
+
+function saveConfig(cfg) {
+  fs.mkdirSync(path.dirname(CONFIG), { recursive: true });
+  fs.writeFileSync(CONFIG, JSON.stringify(cfg, null, 2));
+}
+```
+
+## Troubleshooting
+
+<Accordion title="Error: No activeProject in config">
+  **Cause**: The `activeProject` field is missing or empty in `projects.json`.
+
+  **Solution**: Add the `activeProject` field with a valid project name:
+  ```json
+  {
+    "projects": { "my-project": "/path/to/project" },
+    "activeProject": "my-project"
+  }
+  ```
+</Accordion>
+
+<Accordion title="Error: Unknown project">
+  **Cause**: The `activeProject` value doesn't match any key in the `projects` object.
+
+  **Solution**: Either add the project to the `projects` object or change `activeProject` to an existing project name.
+</Accordion>
+
+<Accordion title="Error: Project path missing">
+  **Cause**: The project name exists in `projects` but has no path or an invalid path.
+
+  **Solution**: Ensure the path is absolute and points to a valid Git repository:
+  ```json
+  "projects": {
+    "my-project": "/home/user/projects/my-project"
+  }
+  ```
+</Accordion>
+
+<Accordion title="Error: Cannot read file">
+  **Cause**: The `projects.json` file doesn't exist or has incorrect permissions.
+
+  **Solution**: 
+  1. Verify the file exists: `ls -la ~/.worklogs/projects.json`
+  2. Check permissions: `chmod 644 ~/.worklogs/projects.json`
+  3. Create the file if missing (see Initial Setup above)
+</Accordion>
+
+## Best Practices
+
+1. **Use Absolute Paths**: Always use absolute paths for project locations, not relative paths
+2. **Backup Your Config**: Keep a backup of your `projects.json` file
+3. **Don't Commit**: Add `projects.json` to your global `.gitignore` to prevent accidental commits
+4. **Group Related Projects**: Use consistent naming conventions for related projects (e.g., `app-frontend`, `app-backend`, `app-mobile`)
+5. **Regular Validation**: Periodically run `list-projects` to verify your configuration is correct
+
+## Next Steps
+
+- Learn how to [generate worklogs](/usage/generating-worklogs)
+- Set up [Gemini CLI authentication](/configuration/gemini-setup)
+- Explore [automation options](/advanced/automation)

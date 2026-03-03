@@ -1,0 +1,199 @@
+---
+title: Customizing prompts
+description: Learn how to customize AI prompts to generate different worklog formats and styles
+---
+
+MCP Worklog uses AI prompts to transform Git commit diffs into readable work logs. You can customize these prompts to change the output format, style, and level of detail.
+
+## Default prompt structure
+
+The default prompt is built by the `buildPromptFromDiffs()` function in `mcp-worklog.js:64-76`:
+
+```javascript
+function buildPromptFromDiffs(diffs) {
+  const combinedDiffs = diffs.join("\n\n---\n\n");
+  return `You are a 10x developer assistant.
+  
+  Input: Recent git commit diffs below:
+  
+  ${combinedDiffs}
+  
+  Task 1: Produce a "Developer Work Log" in markdown format. For each commit write a bullet point summarizing the key code changes and files affected, using the commit hash short form.
+  Task 2: Produce a "Manager Summary" with concise, non-technical bullet points describing overall progress.
+  
+  Output both sections separated by a horizontal rule.`;
+}
+```
+
+## Prompt components
+
+The prompt has three main parts:
+
+<Accordion title="System instruction">
+  The opening line sets the AI's role: `"You are a 10x developer assistant."`
+  
+  You can modify this to change the tone or perspective:
+  - `"You are a technical writer."` - More formal, documentation-focused
+  - `"You are a product manager."` - Business-focused summaries
+  - `"You are a senior engineer doing code review."` - Critical, quality-focused
+</Accordion>
+
+<Accordion title="Input context">
+  The diffs are joined with separators and injected into the prompt.
+  
+  By default, up to 10 commits are included (limited in `getCommitDiffs()` at line 55):
+  ```javascript
+  const limitedHashes = hashes.slice(0, 10);
+  ```
+  
+  To change the commit limit, modify this line.
+</Accordion>
+
+<Accordion title="Task instructions">
+  Two tasks are specified:
+  1. Developer Work Log - Technical bullet points with hashes and files
+  2. Manager Summary - Non-technical progress bullets
+  
+  You can add more tasks or change the format requirements.
+</Accordion>
+
+## Customization examples
+
+### Focus on business impact
+
+```javascript
+function buildPromptFromDiffs(diffs) {
+  const combinedDiffs = diffs.join("\n\n---\n\n");
+  return `You are a product manager.
+  
+  Input: Recent git commit diffs below:
+  
+  ${combinedDiffs}
+  
+  Task: Produce a business-focused summary in 3-5 bullet points. For each change, explain:
+  - What feature or capability was added/changed
+  - The user benefit or business value
+  - Any potential impacts or considerations
+  
+  Use non-technical language suitable for stakeholder updates.`;
+}
+```
+
+### Include testing and quality
+
+```javascript
+function buildPromptFromDiffs(diffs) {
+  const combinedDiffs = diffs.join("\n\n---\n\n");
+  return `You are a senior engineer doing code review.
+  
+  Input: Recent git commit diffs below:
+  
+  ${combinedDiffs}
+  
+  Produce three sections:
+  1. **Changes Made**: Bullet points for each commit with files affected
+  2. **Testing Coverage**: Note any test files changed or testing implications
+  3. **Quality Observations**: Note refactoring, tech debt addressed, or code quality improvements
+  
+  Format as markdown with clear section headers.`;
+}
+```
+
+### Categorize by area
+
+```javascript
+function buildPromptFromDiffs(diffs) {
+  const combinedDiffs = diffs.join("\n\n---\n\n");
+  return `You are a developer assistant.
+  
+  Input: Recent git commit diffs below:
+  
+  ${combinedDiffs}
+  
+  Categorize the changes into sections:
+  - **Frontend**: UI components, styling, user-facing changes
+  - **Backend**: API, database, server-side logic
+  - **DevOps**: CI/CD, infrastructure, deployment
+  - **Documentation**: README, docs, comments
+  - **Testing**: Test files, QA improvements
+  
+  For each category with changes, provide 2-3 bullet points summarizing the work.`;
+}
+```
+
+## Adjusting commit limits
+
+The number of commits included in prompts affects:
+- **Cost**: More commits = longer prompts = higher API costs
+- **Detail**: More commits = more comprehensive but potentially overwhelming summaries
+- **Performance**: More commits = longer processing time
+
+To adjust the limit, modify `getCommitDiffs()` in `mcp-worklog.js:53-62`:
+
+```javascript
+async function getCommitDiffs(repoPath, since) {
+  const hashes = await getCommitHashes(repoPath, since);
+  const limitedHashes = hashes.slice(0, 20); // Changed from 10 to 20
+  const diffs = [];
+  for (const h of limitedHashes) {
+    const diff = await getCommitDiff(repoPath, h);
+    diffs.push(diff);
+  }
+  return diffs;
+}
+```
+
+<Warning>
+  Increasing the commit limit can significantly increase Gemini API costs. A typical diff can be 1-5 KB, so 20 commits might generate 20-100 KB prompts.
+</Warning>
+
+## Prompt templates from README
+
+The README includes two template examples you can adapt:
+
+### Developer log prompt
+
+```text
+You are a developer assistant.
+Input: list of commits (hash, author, date, message, files).
+Produce a "Developer Work Log" in Markdown. For each commit write one bullet with a short action, the short-hash, and top files touched. Tag [docs] or [refactor] when appropriate. Limit to 8 bullets.
+```
+
+### Manager summary prompt
+
+```text
+Produce a short manager-friendly summary (3 lines): a one-line headline and 2 bullets stating business impact in plain language.
+```
+
+## Testing custom prompts
+
+After modifying prompts:
+
+1. **Test with a small date range**
+   ```bash
+   mcp-worklog.js generate yesterday
+   ```
+
+2. **Review the output** in `worklogs/YYYY-MM-DD.md`
+
+3. **Check the cost** in your Gemini console (if using paid API)
+
+4. **Iterate** on the prompt wording until you get the desired format
+
+<Tip>
+  Keep a backup of the original `mcp-worklog.js` file before making prompt changes, so you can easily revert if needed.
+</Tip>
+
+## Best practices
+
+- **Be specific**: Clear task instructions produce better results
+- **Set constraints**: Specify bullet count, section structure, or word limits
+- **Define tone**: Explicitly state whether you want technical or business language
+- **Test incrementally**: Change one aspect at a time to understand impact
+- **Consider your audience**: Different teams need different summary styles
+
+## Related
+
+- [Generate command](/cli/generate) - Running worklog generation
+- [Gemini setup](/configuration/gemini-setup) - Configuring the AI model
+- [Git integration](/advanced/git-integration) - How commits are extracted

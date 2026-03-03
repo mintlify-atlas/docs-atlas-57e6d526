@@ -1,0 +1,298 @@
+---
+title: Git integration
+description: Understand how MCP Worklog integrates with Git repositories to extract commit history and diffs
+---
+
+MCP Worklog reads commit data directly from local Git repositories without requiring any remote API access. This page explains the internals of how Git data is extracted and processed.
+
+## Architecture overview
+
+The Git integration follows this flow:
+
+1. **Date parsing** - Convert user input ("today", "yesterday", date) to ISO timestamp
+2. **Fetch commit hashes** - Get list of commit SHAs since the timestamp
+3. **Extract diffs** - Get full diff output for each commit (limited to 10)
+4. **Build prompt** - Combine diffs into AI prompt
+5. **Generate worklog** - Call Gemini and save output
+
+## Date parsing
+
+The `parseSinceDate()` function (lines 77-119) converts flexible date inputs into ISO timestamps:
+
+```javascript
+function parseSinceDate(input) {
+  const now = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+
+  if (!input || input.toLowerCase() === "today") {
+    // today at 00:00
+    const todayMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    return todayMidnight.toISOString();
+  }
+
+  if (input.toLowerCase() === "yesterday") {
+    // yesterday at 00:00
+    const yesterdayMidnight = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 1
+    );
+    return yesterdayMidnight.toISOString();
+  }
+
+  // Try to parse input as date
+  const parsed = new Date(input);
+  if (!isNaN(parsed)) {
+    // return input date at midnight
+    return new Date(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      parsed.getDate()
+    ).toISOString();
+  }
+
+  // If all fails, default to today
+  const todayMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  return todayMidnight.toISOString();
+}
+```
+
+### Supported date formats
+
+<CardGroup cols={3}>
+  <Card title="today" icon="calendar-day">
+    Current day at 00:00 local time
+  </Card>
+  <Card title="yesterday" icon="calendar-minus">
+    Previous day at 00:00 local time
+  </Card>
+  <Card title="YYYY-MM-DD" icon="calendar">
+    Specific date at 00:00 (e.g., 2025-08-01)
+  </Card>
+</CardGroup>
+
+All dates are normalized to midnight in your local timezone, then converted to ISO format for `git --since`.
+
+## Fetching commit hashes
+
+The `getCommitHashes()` function (lines 27-35) executes a Git command to get commit SHAs:
+
+```javascript
+function getCommitHashes(repoPath, since) {
+  return new Promise((resolve, reject) => {
+    const cmd = `git -C "${repoPath}" log --since="${since}" --pretty=format:"%H"`;
+    require("child_process").exec(cmd, (err, stdout, stderr) => {
+      if (err) return reject(err);
+      const hashes = stdout.trim().split(/\r?\n/).filter(Boolean);
+      resolve(hashes);
+    });
+  });
+}
+```
+
+### Git command breakdown
+
+- `git -C "${repoPath}"` - Execute git in the specified repository path
+- `log --since="${since}"` - Get commits since the ISO timestamp
+- `--pretty=format:"%H"` - Output only full commit hashes (40-char SHA)
+
+### Example output
+
+```text
+f8a3b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9
+a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0
+3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2
+```
+
+## Extracting commit diffs
+
+The `getCommitDiff()` function (lines 38-50) fetches the full diff for each commit:
+
+```javascript
+function getCommitDiff(repoPath, commitHash) {
+  return new Promise((resolve, reject) => {
+    const cmd = `git -C "${repoPath}" show ${commitHash} --unified=3 --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n"`;
+    require("child_process").exec(
+      cmd,
+      { maxBuffer: 20 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) return reject(err);
+        resolve(stdout.trim());
+      }
+    );
+  });
+}
+```
+
+### Git show command breakdown
+
+- `git show ${commitHash}` - Display commit content and diff
+- `--unified=3` - Include 3 lines of context around changes
+- `--pretty=format:"..."` - Format commit metadata
+  - `%H` - Full commit hash
+  - `%an` - Author name
+  - `%ad` - Author date
+- `maxBuffer: 20 * 1024 * 1024` - Allow up to 20 MB output per commit
+
+### Example diff output
+
+```text
+Commit: f8a3b2c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9
+Author: Jane Developer
+Date: Mon Mar 3 14:23:15 2026 -0800
+
+diff --git a/src/index.js b/src/index.js
+index a1b2c3d..e4f5a6b 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -10,7 +10,7 @@ function processData(input) {
+   if (!input) {
+-    return null;
++    return [];
+   }
+```
+
+## Processing commits
+
+The `getCommitDiffs()` function (lines 53-62) orchestrates the full extraction:
+
+```javascript
+async function getCommitDiffs(repoPath, since) {
+  const hashes = await getCommitHashes(repoPath, since);
+  const limitedHashes = hashes.slice(0, 10);
+  const diffs = [];
+  for (const h of limitedHashes) {
+    const diff = await getCommitDiff(repoPath, h);
+    diffs.push(diff);
+  }
+  return diffs;
+}
+```
+
+<Note>
+  Only the **first 10 commits** are processed to keep prompt sizes manageable and control API costs. If you have more than 10 commits in the time period, the oldest commits will be truncated.
+</Note>
+
+## Large repository handling
+
+For repositories with large commits or many changed files:
+
+### Increase maxBuffer
+
+If you encounter "maxBuffer exceeded" errors, increase the buffer size in `getCommitDiff()`:
+
+```javascript
+require("child_process").exec(
+  cmd,
+  { maxBuffer: 50 * 1024 * 1024 }, // Increased to 50 MB
+  (err, stdout, stderr) => {
+    // ...
+  }
+);
+```
+
+### Filter by file path
+
+You can modify the `git show` command to limit diff output to specific paths:
+
+```javascript
+const cmd = `git -C "${repoPath}" show ${commitHash} --unified=3 --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" -- src/`;
+```
+
+This only includes changes under `src/` directory.
+
+## Optional: Committing worklogs to Git
+
+The README suggests an optional workflow for versioning worklogs in a dedicated branch:
+
+```bash
+cd /path/to/project
+git checkout -B worklogs
+git add worklogs/$(date +%F).md
+git commit -m "worklog: $(date +%F)"
+git push origin worklogs --force
+```
+
+<Warning>
+  Using `--force` will rewrite the remote `worklogs` branch. This is acceptable for a personal worklog branch but avoid it for shared branches.
+</Warning>
+
+### Automating worklog commits
+
+You can add this to your automation script after generation:
+
+```bash
+#!/bin/bash
+# Generate worklog
+mcp-worklog.js generate today
+
+# Commit to worklogs branch
+ACTIVE_PROJECT=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.HOME + '/.worklogs/projects.json')).activeProject)")
+PROJECT_PATH=$(node -e "const cfg = JSON.parse(require('fs').readFileSync(process.env.HOME + '/.worklogs/projects.json')); console.log(cfg.projects[cfg.activeProject])")
+
+cd "$PROJECT_PATH"
+git checkout -B worklogs
+git add worklogs/$(date +%F).md
+git commit -m "worklog: $(date +%F)" || echo "No changes to commit"
+git push origin worklogs
+git checkout main
+```
+
+## Troubleshooting
+
+<Accordion title="No commits found since date">
+  **Cause**: The date range has no commits, or the ISO timestamp is in the future.
+  
+  **Solution**:
+  - Verify commits exist: `git log --since="2026-03-03T00:00:00"`
+  - Check your system clock is correct
+  - Try "yesterday" or an earlier explicit date
+</Accordion>
+
+<Accordion title="maxBuffer exceeded errors">
+  **Cause**: A commit diff is larger than 20 MB.
+  
+  **Solution**:
+  - Increase `maxBuffer` to 50 MB or higher
+  - Filter diffs to specific paths with `-- src/`
+  - Use `--diff-filter=ACMRT` to exclude deleted files from diffs
+</Accordion>
+
+<Accordion title="Git command not found">
+  **Cause**: Git is not installed or not in PATH.
+  
+  **Solution**:
+  - Install Git: `sudo apt install git` or `brew install git`
+  - Verify: `which git`
+  - Ensure PATH includes `/usr/bin` or `/usr/local/bin`
+</Accordion>
+
+<Accordion title="Permission denied errors">
+  **Cause**: The Node.js process cannot read the Git repository.
+  
+  **Solution**:
+  - Check repository path in `projects.json` is correct
+  - Verify read permissions: `ls -la /path/to/repo/.git`
+  - Ensure the repository exists and is initialized
+</Accordion>
+
+## Performance considerations
+
+- **Commit limit**: Processing 10 commits typically takes 2-10 seconds depending on diff sizes
+- **Network**: No network calls are made during Git operations (all local)
+- **Disk I/O**: Git operations read from `.git` directory on disk
+- **Memory**: Diffs are loaded into memory; 10 commits ≈ 1-10 MB RAM
+
+## Related
+
+- [Generate command](/cli/generate) - Using the generate command
+- [Automation](/guides/automation) - Setting up cron jobs and hooks
+- [Troubleshooting](/guides/troubleshooting) - Common Git-related issues
