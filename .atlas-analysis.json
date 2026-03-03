@@ -1,0 +1,70 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "MCP Worklog",
+  "projectDescription": "A local-first per-project worklog system that generates AI-powered commit summaries using Gemini CLI and Git.",
+  "theme": "palm",
+  "primaryColor": "#10B981",
+  "lightColor": "#34D399",
+  "darkColor": "#059669",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "CLI Reference",
+        "pages": [
+          "cli/list-projects",
+          "cli/set-active",
+          "cli/generate"
+        ]
+      },
+      {
+        "group": "Configuration",
+        "pages": [
+          "configuration/projects-json",
+          "configuration/gemini-setup"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/automation",
+          "guides/mcp-server",
+          "guides/troubleshooting"
+        ]
+      },
+      {
+        "group": "Advanced",
+        "pages": [
+          "advanced/customizing-prompts",
+          "advanced/git-integration"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Automated worklog generation from Git commits using AI",
+    "Per-project configuration with central management",
+    "Flexible date handling (today, yesterday, or custom dates)",
+    "Developer and manager-friendly summaries",
+    "Local-first operation (no external APIs required)",
+    "Optional MCP server for programmatic access"
+  ],
+  "publicApiSurface": [
+    "list-projects — List all configured projects",
+    "set-active <name> — Set the active project",
+    "generate [since] — Generate worklog for specified date range",
+    "loadConfig() — Load projects configuration",
+    "saveConfig(cfg) — Save projects configuration",
+    "parseSinceDate(input) — Parse date inputs to ISO format",
+    "getCommitHashes(repoPath, since) — Get commit hashes since date",
+    "getCommitDiff(repoPath, commitHash) — Get diff for a commit",
+    "callGemini(promptText) — Call Gemini CLI with prompt"
+  ]
+}
