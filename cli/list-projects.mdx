@@ -10,7 +10,7 @@ The `list-projects` command displays all projects configured in your MCP Worklog
 ## Syntax
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 ```
 
 ## Description
@@ -26,7 +26,7 @@ No parameters or flags are required for this command.
 ### Basic Usage
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 ```
 
 **Expected Output:**
@@ -41,7 +41,7 @@ activeProject: my-app
 If no active project has been configured:
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 ```
 
 **Output:**
@@ -82,7 +82,7 @@ The configuration file should contain:
 Check that all your projects are properly configured:
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 ```
 
 ### Check Active Project Before Generating
@@ -90,11 +90,11 @@ mcp-worklog list-projects
 Before running `generate`, verify which project will be used:
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 # Projects: [ 'my-app', 'api-service' ]
 # activeProject: my-app
 
-mcp-worklog generate
+mcp-worklog.js generate
 ```
 
 ### Quick Project Reference
@@ -102,10 +102,10 @@ mcp-worklog generate
 Use this command to quickly see what project names are available for use with `set-active`:
 
 ```bash
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 # Projects: [ 'my-app', 'api-service', 'frontend' ]
 
-mcp-worklog set-active frontend
+mcp-worklog.js set-active frontend
 ```
 
 ## Notes

@@ -10,7 +10,7 @@ The `set-active` command designates which project should be used when generating
 ## Syntax
 
 ```bash
-mcp-worklog set-active <project-name>
+mcp-worklog.js set-active <project-name>
 ```
 
 ## Parameters
@@ -30,7 +30,7 @@ When you run `generate`, MCP Worklog will use the active project's repository pa
 ### Set a Project as Active
 
 ```bash
-mcp-worklog set-active my-app
+mcp-worklog.js set-active my-app
 ```
 
 **Output:**
@@ -45,16 +45,16 @@ When working on multiple projects, switch the active project before generating w
 
 ```bash
 # Check current active project
-mcp-worklog list-projects
+mcp-worklog.js list-projects
 # Projects: [ 'my-app', 'api-service', 'frontend' ]
 # activeProject: my-app
 
 # Switch to a different project
-mcp-worklog set-active api-service
+mcp-worklog.js set-active api-service
 # activeProject set to api-service
 
 # Generate worklog for the new active project
-mcp-worklog generate
+mcp-worklog.js generate
 ```
 
 ## Error Handling
@@ -64,7 +64,7 @@ mcp-worklog generate
 If you try to set a project that doesn't exist in your configuration:
 
 ```bash
-mcp-worklog set-active nonexistent-project
+mcp-worklog.js set-active nonexistent-project
 ```
 
 **Output:**
@@ -78,7 +78,7 @@ Unknown project: nonexistent-project
 If the configuration file doesn't exist:
 
 ```bash
-mcp-worklog set-active my-app
+mcp-worklog.js set-active my-app
 ```
 
 **Output:**
@@ -121,12 +121,12 @@ If you work on multiple projects throughout the day:
 
 ```bash
 # Morning: work on main app
-mcp-worklog set-active my-app
-mcp-worklog generate
+mcp-worklog.js set-active my-app
+mcp-worklog.js generate
 
 # Afternoon: switch to API service
-mcp-worklog set-active api-service
-mcp-worklog generate
+mcp-worklog.js set-active api-service
+mcp-worklog.js generate
 ```
 
 ### Team Workflow
@@ -135,12 +135,12 @@ When different team members work on different repositories:
 
 ```bash
 # Developer A works on frontend
-mcp-worklog set-active frontend
-mcp-worklog generate today
+mcp-worklog.js set-active frontend
+mcp-worklog.js generate today
 
 # Developer B works on backend
-mcp-worklog set-active api-service
-mcp-worklog generate today
+mcp-worklog.js set-active api-service
+mcp-worklog.js generate today
 ```
 
 ### CI/CD Integration
@@ -150,8 +150,8 @@ Automatically set the active project in scripts:
 ```bash
 #!/bin/bash
 PROJECT_NAME=$1
-mcp-worklog set-active $PROJECT_NAME
-mcp-worklog generate yesterday
+mcp-worklog.js set-active $PROJECT_NAME
+mcp-worklog.js generate yesterday
 ```
 
 ## Notes
